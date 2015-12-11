@@ -10,8 +10,9 @@ This package is under active development. It is incomplete and probably still ha
 * It does not handle period "expressions" yet
 * It does not handle years before 1000 yet _because Go's date parser appears to be built on top of MADNESS_
 * It does not implement temporal operators yet
+* Oh yeah, I am not entirely convinced I have the math working correctly
 
-It does not implement complete CIDOC-CRM (textual) temporal expressions nor will it. That will be left to another package to implement string to year-month-day conversions.
+It does not implement complete CIDOC-CRM (textual) temporal expressions nor will it. Currently there are a handful of `NewThingFromString` functions which allow for simple `YYYY-MM-DD BCE?` strings but these will probably be replaced or at least superseded by equivalent functions that hide more complex string parsing from this package. We'll see.
 
 ## Example
 
@@ -45,6 +46,15 @@ func main (){
      fmt.Printf("lower (from int): %v (%d)\n", lower_slice, lower_slice.AsInt())
      fmt.Printf("upper (from int): %v (%d)\n", upper_slice, upper_slice.AsInt())
 }
+
+// The output of this would be:
+// wedge: 1914-08-04,1918-11-11
+// lower: 1914-08-04
+// upper: 1918-11-11
+// lower (as int): 125469184
+// upper (as int): 125744512
+// lower (from int): 1914-08-04 (125469184)
+// upper (from int): 1918-11-11 (125744512)
 
 ```
 
