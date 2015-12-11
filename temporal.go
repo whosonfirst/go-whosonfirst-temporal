@@ -1,8 +1,10 @@
 package temporal
 
 import (
-	// "errors"
+       "errors"
 	"fmt"
+	"regexp"
+	"strings"
 	"time"
 )
 
@@ -60,41 +62,62 @@ type Period interface {
 	Name() string
 	InnerRange() (Date, Date)
 	OuterRange() (Date, Date)
-	Stringer() string
+	String() string
 }
 
 type Range interface {
 	Upper() *Date
 	Lower() *Date
-	Stringer() string
+	String() string
 }
 
 type Date interface {
 	IsBCE() bool
 	AsInt() int
-	Stringer() string
+	String() string
 }
 
-func NewTimePie(name string, upper Range, lower Range) *TimePie {
+func NewTimePie(name string, upper Range, lower Range) (*TimePie, error) {
 
 	tp := TimePie{name: name, upper: upper, lower: lower}
-	return &tp
+	return &tp, nil
 }
 
-/*
-func NewTimeWedgeFromString(s string) *TimeWedge {
+func NewTimeWedgeFromString(s string) (*TimeWedge, error) {
 
-     // This is the complicated string parser...
+     // This is the complicated string parser but for now it is not complicated
+     // and just assumes a pair of comma separated YYYY-MM-DD BCE? strings
+     
+     // As in: Please to write an EDTF -> YMD parser that we can use here...
+
+     dates := strings.Split(s, ",")
+
+     if len(dates) != 2 {
+     	return nil, errors.New("Invalid string")
+     }
+
+     lower, err := NewTimeSliceFromString(dates[0])
+
+     if err != nil {
+     	return nil, err
+     }
+
+     upper, err := NewTimeSliceFromString(dates[1])
+
+     if err != nil {
+     	return nil, err
+     }
+
+     return NewTimeWedge(lower, upper)
 }
-*/
 
-func NewTimeWedge(lower Date, upper Date) *TimeWedge {
+func NewTimeWedge(lower Date, upper Date) (*TimeWedge, error) {
 
 	tw := TimeWedge{lower: lower, upper: upper}
-	return &tw
+	return &tw, nil
 }
 
-func NewTimeSliceFromInt(i int) *TimeSlice {
+func NewTimeSliceFromInt(i int) (*TimeSlice, error) {
 
 	t := IntToTime(i)
 	bce := false // check flag here...
@@ -102,20 +125,39 @@ func NewTimeSliceFromInt(i int) *TimeSlice {
 	return NewTimeSlice(t, bce)
 }
 
-func NewTimeSliceFromString(s string) *TimeSlice {
+func NewTimeSliceFromString(s string) (*TimeSlice, error) {
 
-     	// please to be parsing me...
+     re, err := regexp.Compile(`(?i)^(\d{1,}-\d{2}-\d{2})(?:\s?(BCE))?$`)
 
-	t := time.Now()
-	bce := false
+     if err != nil {
+     	return nil, err
+     }
 
-	return NewTimeSlice(t, bce)
+     m := re.FindStringSubmatch(s)
+
+     if len(m) == 0 {
+     	return nil, errors.New("Invalid string")
+     }     
+
+     t, err := time.Parse(ISO_8601, m[1])
+
+     if err != nil {
+     	return nil, err
+     }
+
+     bce := false
+
+     if m[2] != "" {
+     	bce = true
+     }
+
+     return NewTimeSlice(t, bce)
 }
 
-func NewTimeSlice(t time.Time, bce bool) *TimeSlice {
+func NewTimeSlice(t time.Time, bce bool) (*TimeSlice, error) {
 
 	ts := TimeSlice{t: t, bce: bce}
-	return &ts
+	return &ts, nil
 }
 
 type TimePie struct {
@@ -140,8 +182,8 @@ func (tp *TimePie) OuterRange() (*Date, *Date) {
 	return tp.lower.Lower(), tp.upper.Upper()
 }
 
-func (tp *TimePie) Stringer() string {
-	return tp.Name()
+func (tp *TimePie) String() string {
+	return fmt.Sprintf("%s (%v - %v)", tp.name, tp.lower, tp.upper)
 }
 
 type TimeWedge struct {
@@ -158,8 +200,9 @@ func (tw *TimeWedge) Lower() Date {
 	return tw.lower
 }
 
-func (tw *TimeWedge) Stringer() string {
-	return "TIME WEDGE"
+func (tw *TimeWedge) String() string {
+
+     	return fmt.Sprintf("%v,%v", tw.lower, tw.upper)
 }
 
 type TimeSlice struct {
@@ -176,8 +219,19 @@ func (ts *TimeSlice) AsInt() int {
 	return TimeToInt(ts.t, ts.bce)
 }
 
-func (ts *TimeSlice) Stringer() string {
-	return fmt.Sprintf("%v", ts.t)
+func (ts *TimeSlice) String() string {
+
+	year := ts.t.Year()
+	month := int(ts.t.Month())
+	day := ts.t.Day()
+
+     	s := fmt.Sprintf("%d-%02d-%02d", year, month, day)
+
+	if (ts.bce) {
+	   s = fmt.Sprintf("%s BCE", s)
+	}
+
+	return s
 }
 
 func Parse(lower string, upper string) (int, int) {

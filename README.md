@@ -16,30 +16,39 @@ It does not implement complete CIDOC-CRM (textual) temporal expressions nor will
 ## Example
 
 ```
-import(
-	"fmt"
-	"temporal"
-)
+import (
+       "fmt"
+       "github.com/whosonfirst/go-whosonfirst-temporal"
+       )
 
-func main() {
+func main (){
 
      lower := "1914-08-04"
      upper := "1918-11-11"
 
-     fmt.Println(lower, upper)
+     s := fmt.Sprintf("%s,%s", lower, upper)
+     w, _ := temporal.NewTimeWedgeFromString(s)
 
-     x, y := temporal.Parse(lower, upper)
-     fmt.Println(x, y)
+     fmt.Printf("wedge: %v\n", w)
+     fmt.Printf("lower: %v\n", w.Lower())
+     fmt.Printf("upper: %v\n", w.Upper())
 
-     lower, upper = temporal.UnParse(x, y)
-     fmt.Println(lower, upper)
+     lower_int := w.Lower().AsInt()
+     upper_int := w.Upper().AsInt()
+
+     fmt.Printf("lower (as int): %d\n", lower_int)
+     fmt.Printf("upper (as int): %d\n", upper_int)
+
+     lower_slice, _ := temporal.NewTimeSliceFromInt(lower_int)
+     upper_slice, _ := temporal.NewTimeSliceFromInt(upper_int)
+
+     fmt.Printf("lower (from int): %v (%d)\n", lower_slice, lower_slice.AsInt())
+     fmt.Printf("upper (from int): %v (%d)\n", upper_slice, upper_slice.AsInt())
 }
 
-// This yields:
-// 1914-08-04 1918-11-11
-// 125469184 125744576
-// 1914-08-04 1918-11-11
 ```
+
+_Not discussed here is the `TimePie` which is a named pair `TimeWedge` object-thingies._
 
 ## See also
 
