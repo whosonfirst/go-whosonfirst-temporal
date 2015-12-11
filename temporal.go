@@ -1,7 +1,7 @@
 package temporal
 
 import (
-	"errors"
+	// "errors"
 	"fmt"
 	"time"
 )
@@ -56,6 +56,130 @@ const (
 	AAT_BIT         int = 0x00000018
 )
 
+type Period interface {
+	Name() string
+	InnerRange() (Date, Date)
+	OuterRange() (Date, Date)
+	Stringer() string
+}
+
+type Range interface {
+	Upper() *Date
+	Lower() *Date
+	Stringer() string
+}
+
+type Date interface {
+	IsBCE() bool
+	AsInt() int
+	Stringer() string
+}
+
+func NewTimePie(name string, upper Range, lower Range) *TimePie {
+
+	tp := TimePie{name: name, upper: upper, lower: lower}
+	return &tp
+}
+
+/*
+func NewTimeWedgeFromString(s string) *TimeWedge {
+
+     // This is the complicated string parser...
+}
+*/
+
+func NewTimeWedge(lower Date, upper Date) *TimeWedge {
+
+	tw := TimeWedge{lower: lower, upper: upper}
+	return &tw
+}
+
+func NewTimeSliceFromInt(i int) *TimeSlice {
+
+	t := IntToTime(i)
+	bce := false // check flag here...
+
+	return NewTimeSlice(t, bce)
+}
+
+func NewTimeSliceFromString(s string) *TimeSlice {
+
+     	// please to be parsing me...
+
+	t := time.Now()
+	bce := false
+
+	return NewTimeSlice(t, bce)
+}
+
+func NewTimeSlice(t time.Time, bce bool) *TimeSlice {
+
+	ts := TimeSlice{t: t, bce: bce}
+	return &ts
+}
+
+type TimePie struct {
+	Period
+	name  string
+	upper Range
+	lower Range
+}
+
+func (tp *TimePie) Name() string {
+
+	return tp.name
+}
+
+func (tp *TimePie) InnerRange() (*Date, *Date) {
+
+	return tp.lower.Upper(), tp.upper.Lower()
+}
+
+func (tp *TimePie) OuterRange() (*Date, *Date) {
+
+	return tp.lower.Lower(), tp.upper.Upper()
+}
+
+func (tp *TimePie) Stringer() string {
+	return tp.Name()
+}
+
+type TimeWedge struct {
+	Range
+	upper Date
+	lower Date
+}
+
+func (tw *TimeWedge) Upper() Date {
+	return tw.upper
+}
+
+func (tw *TimeWedge) Lower() Date {
+	return tw.lower
+}
+
+func (tw *TimeWedge) Stringer() string {
+	return "TIME WEDGE"
+}
+
+type TimeSlice struct {
+	Date
+	t   time.Time
+	bce bool
+}
+
+func (ts *TimeSlice) IsBCE() bool {
+	return ts.bce
+}
+
+func (ts *TimeSlice) AsInt() int {
+	return TimeToInt(ts.t, ts.bce)
+}
+
+func (ts *TimeSlice) Stringer() string {
+	return fmt.Sprintf("%v", ts.t)
+}
+
 func Parse(lower string, upper string) (int, int) {
 
 	t_lower, _ := time.Parse(ISO_8601, lower)
@@ -63,8 +187,8 @@ func Parse(lower string, upper string) (int, int) {
 
 	// TO DO BCE
 
-	l := TimeToInt(t_lower)
-	u := TimeToInt(t_upper)
+	l := TimeToInt(t_lower, false)
+	u := TimeToInt(t_upper, false)
 
 	u = (u | UPPER_FLAG)
 
@@ -79,17 +203,22 @@ func UnParse(lower int, upper int) (string, string) {
 	return t_lower.Format(ISO_8601), t_upper.Format(ISO_8601)
 }
 
-func TimeToInt(t time.Time) int {
+func TimeToInt(t time.Time, bce bool) int {
 
 	var i int
-
 	i = ClearTime(i)
 
-	// TO DO: BCE
+	year := t.Year()
+	month := int(t.Month())
+	day := t.Day()
 
-	i = SetYear(i, t.Year())
-	i = SetMonth(i, int(t.Month())) // Go is weird...
-	i = SetDay(i, t.Day())
+	if bce {
+		year = -year
+	}
+
+	i = SetYear(i, year)
+	i = SetMonth(i, month) // Go is weird...
+	i = SetDay(i, day)
 
 	return i
 }
@@ -99,6 +228,11 @@ func IntToTime(i int) time.Time {
 	year := i >> 16
 	month := (i & GET_MONTH) >> 12
 	day := (i & GET_DAY) >> 7
+
+	/*
+		flag := (i & BCE_FLAG)
+		period_flag := (i & PERIOD_EXPR_BIT)
+	*/
 
 	// TO DO: BCE
 
