@@ -61,4 +61,5 @@ _Not discussed here is the `TimePie` which is a named pair `TimeWedge` object-th
 
 ## See also
 
+* http://cidoc-crm.org/tools.html
 * http://www.cidoc-crm.org/downloads/CIDOC-CRM_temporal_representation.pdf
