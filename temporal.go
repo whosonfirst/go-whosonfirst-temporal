@@ -107,8 +107,6 @@ func TimeToInt(t time.Time, bce bool, upper bool) int {
 func IntToTime(i int) (time.Time, map[string]bool) {
 
 	year := i >> 16
-	month := (i & GET_MONTH) >> 12
-	day := (i & GET_DAY) >> 7
 
 	// Hey look - soon we will make this (all the flags stuff)
 	// into a proper Flag interface and pass that around instead
@@ -126,9 +124,13 @@ func IntToTime(i int) (time.Time, map[string]bool) {
 	   flags[ "is_upper" ] = true
 	}
 
-	ymd := fmt.Sprintf("%d-%02d-%02d", year, month, day)
-	t, _ := time.Parse(ISO_8601, ymd)
+	month := (i & GET_MONTH) >> 12
+	day := (i & GET_DAY) >> 7
 
+	ymd := fmt.Sprintf("%d-%02d-%02d", year, month, day)
+	// fmt.Printf("YMD %s\n", ymd)
+
+	t, _ := time.Parse(ISO_8601, ymd)
 	return t, flags
 }
 
