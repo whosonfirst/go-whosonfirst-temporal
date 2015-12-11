@@ -78,9 +78,45 @@ type Date interface {
 	String() string
 }
 
+type Flags interface {
+     GetBoolean(string) (bool, error)
+     SetBoolean(string, bool) (bool, error)
+}
+
+func StringToTime (s string) (time.Time, Flags, error) {
+
+     re, err := regexp.Compile(`(?i)^(\d{1,}-\d{2}-\d{2})(?:\s?(BCE))?$`)
+
+     if err != nil {
+        nil_time := time.Time{}
+     	return nil_time, nil, err
+     }
+
+     m := re.FindStringSubmatch(s)
+
+     if len(m) == 0 {
+        nil_time := time.Time{}
+     	return nil_time, nil, errors.New("Invalid string")
+     }     
+
+     t, err := time.Parse(ISO_8601, m[1])
+
+     if err != nil {
+     	return nil_time, nil, err
+     }
+
+     flags := NewDefaultTimeFlags()
+
+     if m[2] != "" {
+     	flags.SetBoolean("bce", true)
+     }
+
+     return t, flags, nil
+}
+
 // see below inre notes about flags (and bce and upper)
 
-func TimeToInt(t time.Time, bce bool, upper bool) int {
+func TimeToInt(t time.Time, flags Flags) int {
 
 	var i int
 	i = ClearTime(i)
@@ -89,7 +125,10 @@ func TimeToInt(t time.Time, bce bool, upper bool) int {
 	month := int(t.Month())
 	day := t.Day()
 
-	if bce {
+	bce, _ := flags.GetBoolean("bce")
+	upper, _ := flags.GetBoolean("upper")
+
+	if bce == true {
 		year = -year
 	}
 
@@ -97,31 +136,25 @@ func TimeToInt(t time.Time, bce bool, upper bool) int {
 	i = SetMonth(i, month) // Go is weird...
 	i = SetDay(i, day)
 
-	if upper {
+	if upper == true {
 	   i = (i | UPPER_FLAG)
 	}
 
 	return i
 }
 
-func IntToTime(i int) (time.Time, map[string]bool) {
+func IntToTime(i int) (time.Time, Flags) {
 
 	year := i >> 16
 
-	// Hey look - soon we will make this (all the flags stuff)
-	// into a proper Flag interface and pass that around instead
-	// of the kludge we are using now (20151210/thisisaaronland)
-
-	flags := make(map[string]bool)
-	flags["is_bce"] = false
-	flags["is_upper"] = false
+	flags := NewDefaultTimeFlags()
 
 	if (i & BCE_FLAG) != 0 {
-	   flags[ "is_bce" ] = true
+	   flags.SetBoolean("bce", true)
 	}
 
 	if (i & UPPER_FLAG) != 0 {
-	   flags[ "is_upper" ] = true
+	   flags.SetBoolean("upper", true)
 	}
 
 	month := (i & GET_MONTH) >> 12
@@ -198,13 +231,35 @@ func NewTimeWedgeFromString(s string) (*TimeWedge, error) {
      	return nil, errors.New("Invalid string")
      }
 
-     lower, err := NewTimeSliceFromString(dates[0], false)
+     lower_time, lower_flags, lower_err := StringToTime(dates[0])
+
+     if lower_err != nil {
+     	return nil, lower_err
+     }
+
+     upper_time, upper_flags, upper_err := StringToTime(dates[0])
+
+     if upper_err != nil {
+     	return nil, upper_err
+     }
+
+     // Do some sanity checking around dates here and set BCE flags
+     // accordingly (20151211/thisisaaronland)
+
+     // Hey look - see what we're doing here? There is no way for the
+     // computer (or more specifically the TimeSlice) to "know" it is
+     // the upper bounds of a range since TimeSlices don't even know
+     // about ranges (20151211/thisisaaronland)
+ 
+     upper_flags.SetBoolean("upper", true)
+
+     lower, err := NewTimeSlice(lower_time, lower_flags)
 
      if err != nil {
      	return nil, err
      }
 
-     upper, err := NewTimeSliceFromString(dates[1], true)
+     upper, err := NewTimeSlice(upper_time, upper_flags)
 
      if err != nil {
      	return nil, err
@@ -223,42 +278,27 @@ func NewTimeSliceFromInt(i int) (*TimeSlice, error) {
 
 	t, flags := IntToTime(i)
 
-	return NewTimeSlice(t, flags["is_bce"], flags["is_upper"])
+	return NewTimeSlice(t, flags)
 }
 
-func NewTimeSliceFromString(s string, upper bool) (*TimeSlice, error) {
+func NewTimeSlice(t time.Time, flags Flags) (*TimeSlice, error) {
 
-     re, err := regexp.Compile(`(?i)^(\d{1,}-\d{2}-\d{2})(?:\s?(BCE))?$`)
-
-     if err != nil {
-     	return nil, err
-     }
-
-     m := re.FindStringSubmatch(s)
-
-     if len(m) == 0 {
-     	return nil, errors.New("Invalid string")
-     }     
-
-     t, err := time.Parse(ISO_8601, m[1])
-
-     if err != nil {
-     	return nil, err
-     }
-
-     bce := false
-
-     if m[2] != "" {
-     	bce = true
-     }
-
-     return NewTimeSlice(t, bce, upper)
-}
-
-func NewTimeSlice(t time.Time, bce bool, upper bool) (*TimeSlice, error) {
-
-	ts := TimeSlice{t: t, bce: bce, upper: upper}
+	ts := TimeSlice{time: t, flags: flags}
 	return &ts, nil
+}
+
+func NewDefaultTimeFlags() *TimeFlags {
+
+     booleans := make(map[string]bool)
+     booleans["bce"] = false
+     booleans["upper"] = false
+
+     return NewTimeFlags(booleans)
+}
+
+func NewTimeFlags(b map[string]bool) *TimeFlags {
+     fl := TimeFlags{booleans: b}
+     return &fl
 }
 
 type TimePie struct {
@@ -308,34 +348,60 @@ func (tw *TimeWedge) String() string {
 
 type TimeSlice struct {
 	Date
-	t   time.Time
-	bce bool
-	upper bool
+	time   time.Time
+	flags Flags
+
 }
 
-func (ts *TimeSlice) IsBCE() bool {
-	return ts.bce
-}
-
-func (ts *TimeSlice) IsUpper() bool {
-	return ts.upper
+func (ts *TimeSlice) Flags() Flags {
+	return ts.flags
 }
 
 func (ts *TimeSlice) AsInt() int {
-	return TimeToInt(ts.t, ts.bce, ts.upper)
+	return TimeToInt(ts.time, ts.flags)
 }
 
 func (ts *TimeSlice) String() string {
 
-	year := ts.t.Year()
-	month := int(ts.t.Month())
-	day := ts.t.Day()
+	year := ts.time.Year()
+	month := int(ts.time.Month())
+	day := ts.time.Day()
 
      	s := fmt.Sprintf("%d-%02d-%02d", year, month, day)
 
-	if (ts.bce) {
+	bce, _ := ts.flags.GetBoolean("bce")
+
+	if bce == true {
 	   s = fmt.Sprintf("%s BCE", s)
 	}
 
 	return s
+}
+
+type TimeFlags struct {
+     Flags
+     booleans map[string]bool
+}
+
+func (tf *TimeFlags) GetBoolean (k string) (bool, error) {
+
+     v, ok := tf.booleans[k]
+
+     if !ok{
+     	return false, errors.New("Unknown flag")
+     }
+
+     return v, nil
+}
+
+func (tf *TimeFlags) SetBoolean (k string, v bool) (bool, error) {
+
+     _, ok := tf.booleans[k]
+
+     if !ok{
+     	return false, errors.New("Unknown flag")
+     }
+
+     tf.booleans[k] = v
+     return true, nil
 }
