@@ -73,9 +73,109 @@ type Range interface {
 
 type Date interface {
 	IsBCE() bool
+	IsUpper() bool
 	AsInt() int
 	String() string
 }
+
+// see below inre notes about flags (and bce and upper)
+
+func TimeToInt(t time.Time, bce bool, upper bool) int {
+
+	var i int
+	i = ClearTime(i)
+
+	year := t.Year()
+	month := int(t.Month())
+	day := t.Day()
+
+	if bce {
+		year = -year
+	}
+
+	i = SetYear(i, year)
+	i = SetMonth(i, month) // Go is weird...
+	i = SetDay(i, day)
+
+	if upper {
+	   i = (i | UPPER_FLAG)
+	}
+
+	return i
+}
+
+func IntToTime(i int) (time.Time, map[string]bool) {
+
+	year := i >> 16
+	month := (i & GET_MONTH) >> 12
+	day := (i & GET_DAY) >> 7
+
+	// Hey look - soon we will make this (all the flags stuff)
+	// into a proper Flag interface and pass that around instead
+	// of the kludge we are using now (20151210/thisisaaronland)
+
+	flags := make(map[string]bool)
+	flags["is_bce"] = false
+	flags["is_upper"] = false
+
+	if (i & BCE_FLAG) != 0 {
+	   flags[ "is_bce" ] = true
+	}
+
+	if (i & UPPER_FLAG) != 0 {
+	   flags[ "is_upper" ] = true
+	}
+
+	ymd := fmt.Sprintf("%d-%02d-%02d", year, month, day)
+	t, _ := time.Parse(ISO_8601, ymd)
+
+	return t, flags
+}
+
+func ClearTime(time int) int {
+	return time & RESET_TIME
+}
+
+func SetDay(time int, day int) int {
+	return (time & RESET_DAY) | ((day | 0) << 7)
+}
+
+func SetMonth(time int, month int) int {
+	return (time & RESET_MONTH) | ((month | 0) << 12)
+}
+
+func SetYear(time int, year int) int {
+	return (time & RESET_YEAR) | ((year | 0) << 16)
+}
+
+/*
+func SetExprBits(time int, expr int) (int, error) {
+
+	var operand int
+
+	switch expr {
+	case SIS_DATE:
+		operand = DATE_BIT
+	case DECADE:
+		operand = EXPL_DEC_BIT
+	case IMPL_DECADE:
+		operand = IMPL_DEC_BIT
+	case Century:
+		operand = CENTURY_BIT
+	case Circa:
+		operand = CIRCA_BIT
+	case PERIOD_EXPR:
+		operand = PERIOD_EXPR_BIT
+	case IMPL_PERIOD:
+		operand = IMPL_PERIOD_BIT
+	default:
+		return 0, errors.New("Unknown expression")
+	}
+
+	result := (time | operand)
+	return result, nil
+}
+*/
 
 func NewTimePie(name string, upper Range, lower Range) (*TimePie, error) {
 
@@ -96,13 +196,13 @@ func NewTimeWedgeFromString(s string) (*TimeWedge, error) {
      	return nil, errors.New("Invalid string")
      }
 
-     lower, err := NewTimeSliceFromString(dates[0])
+     lower, err := NewTimeSliceFromString(dates[0], false)
 
      if err != nil {
      	return nil, err
      }
 
-     upper, err := NewTimeSliceFromString(dates[1])
+     upper, err := NewTimeSliceFromString(dates[1], true)
 
      if err != nil {
      	return nil, err
@@ -119,13 +219,12 @@ func NewTimeWedge(lower Date, upper Date) (*TimeWedge, error) {
 
 func NewTimeSliceFromInt(i int) (*TimeSlice, error) {
 
-	t := IntToTime(i)
-	bce := false // check flag here...
+	t, flags := IntToTime(i)
 
-	return NewTimeSlice(t, bce)
+	return NewTimeSlice(t, flags["is_bce"], flags["is_upper"])
 }
 
-func NewTimeSliceFromString(s string) (*TimeSlice, error) {
+func NewTimeSliceFromString(s string, upper bool) (*TimeSlice, error) {
 
      re, err := regexp.Compile(`(?i)^(\d{1,}-\d{2}-\d{2})(?:\s?(BCE))?$`)
 
@@ -151,12 +250,12 @@ func NewTimeSliceFromString(s string) (*TimeSlice, error) {
      	bce = true
      }
 
-     return NewTimeSlice(t, bce)
+     return NewTimeSlice(t, bce, upper)
 }
 
-func NewTimeSlice(t time.Time, bce bool) (*TimeSlice, error) {
+func NewTimeSlice(t time.Time, bce bool, upper bool) (*TimeSlice, error) {
 
-	ts := TimeSlice{t: t, bce: bce}
+	ts := TimeSlice{t: t, bce: bce, upper: upper}
 	return &ts, nil
 }
 
@@ -209,14 +308,19 @@ type TimeSlice struct {
 	Date
 	t   time.Time
 	bce bool
+	upper bool
 }
 
 func (ts *TimeSlice) IsBCE() bool {
 	return ts.bce
 }
 
+func (ts *TimeSlice) IsUpper() bool {
+	return ts.upper
+}
+
 func (ts *TimeSlice) AsInt() int {
-	return TimeToInt(ts.t, ts.bce)
+	return TimeToInt(ts.t, ts.bce, ts.upper)
 }
 
 func (ts *TimeSlice) String() string {
@@ -233,111 +337,3 @@ func (ts *TimeSlice) String() string {
 
 	return s
 }
-
-func Parse(lower string, upper string) (int, int) {
-
-	t_lower, _ := time.Parse(ISO_8601, lower)
-	t_upper, _ := time.Parse(ISO_8601, upper)
-
-	// TO DO BCE
-
-	l := TimeToInt(t_lower, false)
-	u := TimeToInt(t_upper, false)
-
-	u = (u | UPPER_FLAG)
-
-	return l, u
-}
-
-func UnParse(lower int, upper int) (string, string) {
-
-	t_lower := IntToTime(lower)
-	t_upper := IntToTime(upper)
-
-	return t_lower.Format(ISO_8601), t_upper.Format(ISO_8601)
-}
-
-func TimeToInt(t time.Time, bce bool) int {
-
-	var i int
-	i = ClearTime(i)
-
-	year := t.Year()
-	month := int(t.Month())
-	day := t.Day()
-
-	if bce {
-		year = -year
-	}
-
-	i = SetYear(i, year)
-	i = SetMonth(i, month) // Go is weird...
-	i = SetDay(i, day)
-
-	return i
-}
-
-func IntToTime(i int) time.Time {
-
-	year := i >> 16
-	month := (i & GET_MONTH) >> 12
-	day := (i & GET_DAY) >> 7
-
-	/*
-		flag := (i & BCE_FLAG)
-		period_flag := (i & PERIOD_EXPR_BIT)
-	*/
-
-	// TO DO: BCE
-
-	ymd := fmt.Sprintf("%d-%02d-%02d", year, month, day)
-
-	t, _ := time.Parse(ISO_8601, ymd)
-
-	return t
-}
-
-func ClearTime(time int) int {
-	return time & RESET_TIME
-}
-
-func SetDay(time int, day int) int {
-	return (time & RESET_DAY) | ((day | 0) << 7)
-}
-
-func SetMonth(time int, month int) int {
-	return (time & RESET_MONTH) | ((month | 0) << 12)
-}
-
-func SetYear(time int, year int) int {
-	return (time & RESET_YEAR) | ((year | 0) << 16)
-}
-
-/*
-func SetExprBits(time int, expr int) (int, error) {
-
-	var operand int
-
-	switch expr {
-	case SIS_DATE:
-		operand = DATE_BIT
-	case DECADE:
-		operand = EXPL_DEC_BIT
-	case IMPL_DECADE:
-		operand = IMPL_DEC_BIT
-	case Century:
-		operand = CENTURY_BIT
-	case Circa:
-		operand = CIRCA_BIT
-	case PERIOD_EXPR:
-		operand = PERIOD_EXPR_BIT
-	case IMPL_PERIOD:
-		operand = IMPL_PERIOD_BIT
-	default:
-		return 0, errors.New("Unknown expression")
-	}
-
-	result := (time | operand)
-	return result, nil
-}
-*/

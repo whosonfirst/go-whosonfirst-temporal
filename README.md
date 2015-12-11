@@ -52,10 +52,9 @@ func main (){
 // lower: 1914-08-04
 // upper: 1918-11-11
 // lower (as int): 125469184
-// upper (as int): 125744512
+// upper (as int): 125744576
 // lower (from int): 1914-08-04 (125469184)
-// upper (from int): 1918-11-11 (125744512)
-
+// upper (from int): 1918-11-11 (125744576)
 ```
 
 _Not discussed here is the `TimePie` which is a named pair `TimeWedge` object-thingies._
