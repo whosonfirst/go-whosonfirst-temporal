@@ -8,10 +8,21 @@ import (
 	"time"
 )
 
+// time_parse - extern "C" int _export WINAPI time_parse(int *lower, int *upper, char *parse_str)
+// time_primitive_c_library_1.0/time_dll/time_parser
+
+// present - void TIME::present(char *string, TM_LANGUAGE language)
+// time_primitive_c_library_1.0/time_dll/time.cpp
+
+// all of the 'store' methods
+// time_primitive_c_library_1.0/time_dll/time.cpp
+
 const (
 
 	// Go is weird and this does not support years < 1000 (and presumably > 9999...)
 	// See also: https://github.com/metakeule/fmtdate
+
+	// https://golang.org/pkg/time/#Time.Format
 
 	ISO_8601 string = "2006-01-02"
 
@@ -85,7 +96,9 @@ type Flags interface {
 
 func StringToTime (s string) (time.Time, Flags, error) {
 
-     re, err := regexp.Compile(`(?i)^(\d{1,}-\d{2}-\d{2})(?:\s?(BCE))?$`)
+     // check for CE?
+
+     re, err := regexp.Compile(`(?i)^(\d{1,}-\d{2}-\d{2})(?:\s?(BCE|CE))?$`)
 
      if err != nil {
         nil_time := time.Time{}
@@ -108,7 +121,16 @@ func StringToTime (s string) (time.Time, Flags, error) {
      flags := NewDefaultTimeFlags()
 
      if m[2] != "" {
-     	flags.SetBoolean("bce", true)
+
+     	era := m[2].ToUpper()
+
+	if era == "BCE" {
+	       flags.SetBoolean("bce", true)
+	} else if era == "CE" {
+	       flags.SetBoolean("bce", false)
+	} else {
+	  // pass
+	}
      }
 
      return t, flags, nil
@@ -245,6 +267,27 @@ func NewTimeWedgeFromString(s string) (*TimeWedge, error) {
 
      // Do some sanity checking around dates here and set BCE flags
      // accordingly (20151211/thisisaaronland)
+
+     lower_bce, _ := lower_flag.GetBoolean("bce")
+     upper_bce, _ := upper_flag.GetBoolean("bce")
+
+     if upper_bce == true && lower_bce == false {
+     	return nil, errors.New("BCE/CE mismatch")
+     }
+
+     if lower_bce == false && upper_bce == false {
+
+     	if upper_bce < lower_bce {
+	   return nil, errors.New("Upper date precedes lower date")
+	}
+     }
+
+     if lower_bce == true && upper_bce == true {
+
+     	if upper_bce < lower_bce {
+	   return nil, errors.New("Upper date precedes lower date")
+	}
+     }
 
      // Hey look - see what we're doing here? There is no way for the
      // computer (or more specifically the TimeSlice) to "know" it is
