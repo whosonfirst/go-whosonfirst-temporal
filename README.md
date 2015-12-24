@@ -1,16 +1,15 @@
 # go-whosonfirst-temporal
 
-A Go package for converting `year-month-day` expressions to and from 8-byte integers following the model of the CIDOC‐CRM Temporal representation specification.
+A Go package for converting `year-month-day` expressions to and from 8-byte integers modeled after the model of the CIDOC‐CRM Temporal representation specification.
 
 ## Caveats
 
 This package is under active development. It is incomplete and probably still has bugs. Among other things:
 
-* It does not handle BCE yet
-* It does not handle period "expressions" yet
-* It does not handle years before 1000 yet _because Go's date parser appears to be built on top of MADNESS..._
+* It is not the CIDOC‐CRM Temporal specification – specifically the numeric representations of dates are _not_ the same
+* It does not handle period "expressions" or any of signifiers yet
+* It does not handle years greater than 9999 (or less than -9999) yet _because Go's date parser appears to be built on top of MADNESS..._
 * It does not implement temporal operators yet
-* Oh yeah, I am not entirely convinced I have the math working correctly - gentle cluebats are welcomed
 
 It does not implement complete CIDOC-CRM (textual) temporal expressions nor will it. Currently there are a handful of `NewThingFromString` functions which allow for simple `YYYY-MM-DD BCE?` strings but these will probably be replaced or at least superseded by equivalent functions that hide more complex string parsing from this package. We'll see.
 

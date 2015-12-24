@@ -4,23 +4,10 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
-
-// aka 'TimeToInt'
-// time_parse - extern "C" int _export WINAPI time_parse(int *lower, int *upper, char *parse_str)
-// time_primitive_c_library_1.0/time_dll/time_parser <-- this appears to call 'yacc' because...?
-
-// aka 'IntToTime'
-// present - void TIME::present(char *string, TM_LANGUAGE language)
-// time_primitive_c_library_1.0/time_dll/time.cpp
-
-// all of the 'store' methods
-// time_primitive_c_library_1.0/time_dll/time.cpp
-
-// all of the 'set' methods
-// time_primitive_c_library_1.0/time_dll/time.h
 
 /*
 
@@ -71,8 +58,7 @@ const (
 	RESET_YEAR  int = 0x0000ffff
 	RESET_MONTH int = 0xffff0fff
 	RESET_DAY   int = 0xfffff07f
-	// BCE_FLAG    int = 0x80000000
-	BCE_FLAG    int = 0x00000020
+	BCE_FLAG    int = 0x80000000
 	UPPER_FLAG  int = 0x00000040
 	CLEAR_DATE  int = 0x8000007f
 	CLEAR_FLAGS int = 0xffffffa0
@@ -121,34 +107,51 @@ type Flags interface {
 
 func StringToTime(s string) (time.Time, Flags, error) {
 
-	// check for CE?
+	nil_time := time.Time{}
 
-	re, err := regexp.Compile(`(?i)^(\d{1,}-\d{2}-\d{2})(?:\s?(BCE|CE))?$`)
+	re, err := regexp.Compile(`(?i)^((\d{1,})-(\d{1,2})-(\d{1,2}))(?:\s?(BCE|CE))?$`)
 
 	if err != nil {
-		nil_time := time.Time{}
 		return nil_time, nil, err
 	}
 
 	m := re.FindStringSubmatch(s)
 
 	if len(m) == 0 {
-		nil_time := time.Time{}
 		return nil_time, nil, errors.New("Invalid string")
 	}
 
-	t, err := time.Parse(ISO_8601, m[1])
+	yyyy, err := strconv.Atoi(m[2])
 
 	if err != nil {
-		nil_time := time.Time{}
+	       return nil_time, nil, err
+	}
+
+	mm, err := strconv.Atoi(m[3])
+
+	if err != nil {
+	       return nil_time, nil, err
+	}
+
+	dd, err := strconv.Atoi(m[4])
+
+	if err != nil {
+	       return nil_time, nil, err
+	}
+
+	ymd := fmt.Sprintf("%04d-%02d-%02d", yyyy, mm, dd)
+
+	t, err := time.Parse(ISO_8601, ymd)
+
+	if err != nil {
 		return nil_time, nil, err
 	}
 
 	flags := NewDefaultTimeFlags()
 
-	if m[2] != "" {
+	if m[5] != "" {
 
-		era := strings.ToUpper(m[2])
+		era := strings.ToUpper(m[5])
 
 		if era == "BCE" {
 			flags.SetBoolean("bce", true)
@@ -164,10 +167,17 @@ func StringToTime(s string) (time.Time, Flags, error) {
 
 // see below inre notes about flags (and bce and upper)
 
+/*
+From the CIDOC-CRM implementation
+- time_parse - extern "C" int _export WINAPI time_parse(int *lower, int *upper, char *parse_str)
+  - time_primitive_c_library_1.0/time_dll/time_parser <-- this appears to call 'yacc' because...?
+- all of the 'store' methods are in time_primitive_c_library_1.0/time_dll/time.cpp
+- all of the 'set' methods are in time_primitive_c_library_1.0/time_dll/time.h
+*/
+
 func TimeToInt(t time.Time, flags Flags) int {
 
-	var i int
-	i = ClearTime(i)
+	i := 0     
 
 	bce, _ := flags.GetBoolean("bce")
 	upper, _ := flags.GetBoolean("upper")
@@ -180,39 +190,52 @@ func TimeToInt(t time.Time, flags Flags) int {
 	i = SetMonth(i, month) // Go is weird...
 	i = SetDay(i, day)
 
-	if bce == true {
-		i = (i | BCE_FLAG)
-	}
-
 	if upper == true {
 		i = (i | UPPER_FLAG)
+	}
+
+	if bce {
+	   i = -i
 	}
 
 	return i
 }
 
+/*
+
+From the CIDOC-CRM implementation
+- present - void TIME::present(char *string, TM_LANGUAGE language)
+  - time_primitive_c_library_1.0/time_dll/time.cpp
+*/
+
 func IntToTime(i int) (time.Time, Flags) {
 
+        bce := false
+	upper := false
+
+	if i < 0 {
+	   bce = true
+	   i = -i
+	}
+     		 
+	if (i & UPPER_FLAG) != 0 {
+	   upper = true
+	}
+
 	year := i >> 16
-
-	upper := i & UPPER_FLAG
-	bce := i & BCE_FLAG
-
-	// fmt.Printf("[i] %d [bce] %d [upper] %d\n", i, bce, upper)
-
 	month := (i & GET_MONTH) >> 12
 	day := (i & GET_DAY) >> 7
 
-	ymd := fmt.Sprintf("%d-%02d-%02d", year, month, day)
+	ymd := fmt.Sprintf("%04d-%02d-%02d", year, month, day)
 	t, _ := time.Parse(ISO_8601, ymd)
 
 	flags := NewDefaultTimeFlags()
 
-	if bce != 0 {
+	if bce {
 		flags.SetBoolean("bce", true)
 	}
 
-	if (upper) != 0 {
+	if upper {
 		flags.SetBoolean("upper", true)
 	}
 
