@@ -1,21 +1,41 @@
 package temporal
 
 import (
-       "errors"
+	"errors"
 	"fmt"
 	"regexp"
 	"strings"
 	"time"
 )
 
+// aka 'TimeToInt'
 // time_parse - extern "C" int _export WINAPI time_parse(int *lower, int *upper, char *parse_str)
-// time_primitive_c_library_1.0/time_dll/time_parser
+// time_primitive_c_library_1.0/time_dll/time_parser <-- this appears to call 'yacc' because...?
 
+// aka 'IntToTime'
 // present - void TIME::present(char *string, TM_LANGUAGE language)
 // time_primitive_c_library_1.0/time_dll/time.cpp
 
 // all of the 'store' methods
 // time_primitive_c_library_1.0/time_dll/time.cpp
+
+// all of the 'set' methods
+// time_primitive_c_library_1.0/time_dll/time.h
+
+/*
+
+	In an arithmetic shift, the bits that are shifted out of either end are
+	discarded. In a left arithmetic shift, zeros are shifted in on the
+	right; in a right arithmetic shift, the sign bit (the MSB in two's
+	complement) is shifted in on the left, thus preserving the sign of the
+	operand. This statement is not reliable in the latest C language draft
+	standard, however. If the value being shifted is negative, the result is
+	"implementation-defined," indicating the result is not necessarily
+	consistent across platforms.[2]
+
+	-- https://en.wikipedia.org/wiki/Bitwise_operation#Arithmetic_shift
+
+*/
 
 const (
 
@@ -26,6 +46,7 @@ const (
 
 	ISO_8601 string = "2006-01-02"
 
+	/*
 	SIS_DATE    int = 1
 	YEAR        int = 2
 	DECADE      int = 3
@@ -44,12 +65,14 @@ const (
 
 	NEGATIVE_INF int = 0x80000000
 	POSITIVE_INF int = 0x7fffffff
+	*/
 
 	RESET_TIME  int = 0x00000000
 	RESET_YEAR  int = 0x0000ffff
 	RESET_MONTH int = 0xffff0fff
 	RESET_DAY   int = 0xfffff07f
-	BCE_FLAG    int = 0x80000000
+	// BCE_FLAG    int = 0x80000000
+	BCE_FLAG    int = 0x00000020
 	UPPER_FLAG  int = 0x00000040
 	CLEAR_DATE  int = 0x8000007f
 	CLEAR_FLAGS int = 0xffffffa0
@@ -57,6 +80,7 @@ const (
 	GET_MONTH   int = 0x0000f000
 	GET_DAY     int = 0x00000f80
 
+	/*
 	EXPR_BITS       int = 0x0000003e
 	PERIOD_EXPR_BIT int = 0x00000001
 	IMPL_PERIOD_BIT int = 0x00000003
@@ -67,6 +91,7 @@ const (
 	CENTURY_BIT     int = 0x00000010
 	CIRCA_BIT       int = 0x00000020
 	AAT_BIT         int = 0x00000018
+	*/
 )
 
 type Period interface {
@@ -90,50 +115,51 @@ type Date interface {
 }
 
 type Flags interface {
-     GetBoolean(string) (bool, error)
-     SetBoolean(string, bool) (bool, error)
+	GetBoolean(string) (bool, error)
+	SetBoolean(string, bool) (bool, error)
 }
 
-func StringToTime (s string) (time.Time, Flags, error) {
+func StringToTime(s string) (time.Time, Flags, error) {
 
-     // check for CE?
+	// check for CE?
 
-     re, err := regexp.Compile(`(?i)^(\d{1,}-\d{2}-\d{2})(?:\s?(BCE|CE))?$`)
+	re, err := regexp.Compile(`(?i)^(\d{1,}-\d{2}-\d{2})(?:\s?(BCE|CE))?$`)
 
-     if err != nil {
-        nil_time := time.Time{}
-     	return nil_time, nil, err
-     }
-
-     m := re.FindStringSubmatch(s)
-
-     if len(m) == 0 {
-        nil_time := time.Time{}
-     	return nil_time, nil, errors.New("Invalid string")
-     }     
-
-     t, err := time.Parse(ISO_8601, m[1])
-
-     if err != nil {
-     	return nil_time, nil, err
-     }
-
-     flags := NewDefaultTimeFlags()
-
-     if m[2] != "" {
-
-     	era := m[2].ToUpper()
-
-	if era == "BCE" {
-	       flags.SetBoolean("bce", true)
-	} else if era == "CE" {
-	       flags.SetBoolean("bce", false)
-	} else {
-	  // pass
+	if err != nil {
+		nil_time := time.Time{}
+		return nil_time, nil, err
 	}
-     }
 
-     return t, flags, nil
+	m := re.FindStringSubmatch(s)
+
+	if len(m) == 0 {
+		nil_time := time.Time{}
+		return nil_time, nil, errors.New("Invalid string")
+	}
+
+	t, err := time.Parse(ISO_8601, m[1])
+
+	if err != nil {
+		nil_time := time.Time{}
+		return nil_time, nil, err
+	}
+
+	flags := NewDefaultTimeFlags()
+
+	if m[2] != "" {
+
+		era := strings.ToUpper(m[2])
+
+		if era == "BCE" {
+			flags.SetBoolean("bce", true)
+		} else if era == "CE" {
+			flags.SetBoolean("bce", false)
+		} else {
+			// pass
+		}
+	}
+
+	return t, flags, nil
 }
 
 // see below inre notes about flags (and bce and upper)
@@ -143,23 +169,23 @@ func TimeToInt(t time.Time, flags Flags) int {
 	var i int
 	i = ClearTime(i)
 
-	year := t.Year()
-	month := int(t.Month())
-	day := t.Day()
-
 	bce, _ := flags.GetBoolean("bce")
 	upper, _ := flags.GetBoolean("upper")
 
-	if bce == true {
-		year = -year
-	}
+	year := t.Year()
+	month := int(t.Month())
+	day := t.Day()
 
 	i = SetYear(i, year)
 	i = SetMonth(i, month) // Go is weird...
 	i = SetDay(i, day)
 
+	if bce == true {
+		i = (i | BCE_FLAG)
+	}
+
 	if upper == true {
-	   i = (i | UPPER_FLAG)
+		i = (i | UPPER_FLAG)
 	}
 
 	return i
@@ -169,23 +195,27 @@ func IntToTime(i int) (time.Time, Flags) {
 
 	year := i >> 16
 
-	flags := NewDefaultTimeFlags()
+	upper := i & UPPER_FLAG
+	bce := i & BCE_FLAG
 
-	if (i & BCE_FLAG) != 0 {
-	   flags.SetBoolean("bce", true)
-	}
-
-	if (i & UPPER_FLAG) != 0 {
-	   flags.SetBoolean("upper", true)
-	}
+	// fmt.Printf("[i] %d [bce] %d [upper] %d\n", i, bce, upper)
 
 	month := (i & GET_MONTH) >> 12
 	day := (i & GET_DAY) >> 7
 
 	ymd := fmt.Sprintf("%d-%02d-%02d", year, month, day)
-	// fmt.Printf("YMD %s\n", ymd)
-
 	t, _ := time.Parse(ISO_8601, ymd)
+
+	flags := NewDefaultTimeFlags()
+
+	if bce != 0 {
+		flags.SetBoolean("bce", true)
+	}
+
+	if (upper) != 0 {
+		flags.SetBoolean("upper", true)
+	}
+
 	return t, flags
 }
 
@@ -242,73 +272,77 @@ func NewTimePie(name string, upper Range, lower Range) (*TimePie, error) {
 
 func NewTimeWedgeFromString(s string) (*TimeWedge, error) {
 
-     // This is the complicated string parser but for now it is not complicated
-     // and just assumes a pair of comma separated YYYY-MM-DD BCE? strings
-     
-     // As in: Please to write an EDTF -> YMD parser that we can use here...
+	// This is the complicated string parser but for now it is not complicated
+	// and just assumes a pair of comma separated YYYY-MM-DD BCE? strings
 
-     dates := strings.Split(s, ",")
+	// As in: Please to write an EDTF -> YMD parser that we can use here...
 
-     if len(dates) != 2 {
-     	return nil, errors.New("Invalid string")
-     }
+	dates := strings.Split(s, ",")
 
-     lower_time, lower_flags, lower_err := StringToTime(dates[0])
-
-     if lower_err != nil {
-     	return nil, lower_err
-     }
-
-     upper_time, upper_flags, upper_err := StringToTime(dates[0])
-
-     if upper_err != nil {
-     	return nil, upper_err
-     }
-
-     // Do some sanity checking around dates here and set BCE flags
-     // accordingly (20151211/thisisaaronland)
-
-     lower_bce, _ := lower_flag.GetBoolean("bce")
-     upper_bce, _ := upper_flag.GetBoolean("bce")
-
-     if upper_bce == true && lower_bce == false {
-     	return nil, errors.New("BCE/CE mismatch")
-     }
-
-     if lower_bce == false && upper_bce == false {
-
-     	if upper_bce < lower_bce {
-	   return nil, errors.New("Upper date precedes lower date")
+	if len(dates) != 2 {
+		return nil, errors.New("Invalid string")
 	}
-     }
 
-     if lower_bce == true && upper_bce == true {
+	lower_time, lower_flags, lower_err := StringToTime(dates[0])
 
-     	if upper_bce < lower_bce {
-	   return nil, errors.New("Upper date precedes lower date")
+	if lower_err != nil {
+		return nil, lower_err
 	}
-     }
 
-     // Hey look - see what we're doing here? There is no way for the
-     // computer (or more specifically the TimeSlice) to "know" it is
-     // the upper bounds of a range since TimeSlices don't even know
-     // about ranges (20151211/thisisaaronland)
- 
-     upper_flags.SetBoolean("upper", true)
+	upper_time, upper_flags, upper_err := StringToTime(dates[1])
 
-     lower, err := NewTimeSlice(lower_time, lower_flags)
+	if upper_err != nil {
+		return nil, upper_err
+	}
 
-     if err != nil {
-     	return nil, err
-     }
+	// Do some sanity checking around dates here and set BCE flags
+	// accordingly (20151211/thisisaaronland)
 
-     upper, err := NewTimeSlice(upper_time, upper_flags)
+	lower_bce, _ := lower_flags.GetBoolean("bce")
+	upper_bce, _ := upper_flags.GetBoolean("bce")
 
-     if err != nil {
-     	return nil, err
-     }
+	if upper_bce == true && lower_bce == false {
+		return nil, errors.New("BCE/CE mismatch")
+	}
 
-     return NewTimeWedge(lower, upper)
+	if lower_bce == false && upper_bce == false {
+
+		/*
+			     	if upper_time < lower_time {
+				   return nil, errors.New("Upper date precedes lower date")
+				}
+		*/
+	}
+
+	if lower_bce == true && upper_bce == true {
+
+		/*
+			     	if upper_time < lower_time {
+				   return nil, errors.New("Upper date precedes lower date")
+				}
+		*/
+	}
+
+	// Hey look - see what we're doing here? There is no way for the
+	// computer (or more specifically the TimeSlice) to "know" it is
+	// the upper bounds of a range since TimeSlices don't even know
+	// about ranges (20151211/thisisaaronland)
+
+	upper_flags.SetBoolean("upper", true)
+
+	lower, err := NewTimeSlice(lower_time, lower_flags)
+
+	if err != nil {
+		return nil, err
+	}
+
+	upper, err := NewTimeSlice(upper_time, upper_flags)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return NewTimeWedge(lower, upper)
 }
 
 func NewTimeWedge(lower Date, upper Date) (*TimeWedge, error) {
@@ -332,16 +366,16 @@ func NewTimeSlice(t time.Time, flags Flags) (*TimeSlice, error) {
 
 func NewDefaultTimeFlags() *TimeFlags {
 
-     booleans := make(map[string]bool)
-     booleans["bce"] = false
-     booleans["upper"] = false
+	booleans := make(map[string]bool)
+	booleans["bce"] = false
+	booleans["upper"] = false
 
-     return NewTimeFlags(booleans)
+	return NewTimeFlags(booleans)
 }
 
 func NewTimeFlags(b map[string]bool) *TimeFlags {
-     fl := TimeFlags{booleans: b}
-     return &fl
+	fl := TimeFlags{booleans: b}
+	return &fl
 }
 
 type TimePie struct {
@@ -386,14 +420,13 @@ func (tw *TimeWedge) Lower() Date {
 
 func (tw *TimeWedge) String() string {
 
-     	return fmt.Sprintf("%v,%v", tw.lower, tw.upper)
+	return fmt.Sprintf("%v,%v", tw.lower, tw.upper)
 }
 
 type TimeSlice struct {
 	Date
-	time   time.Time
+	time  time.Time
 	flags Flags
-
 }
 
 func (ts *TimeSlice) Flags() Flags {
@@ -410,41 +443,41 @@ func (ts *TimeSlice) String() string {
 	month := int(ts.time.Month())
 	day := ts.time.Day()
 
-     	s := fmt.Sprintf("%d-%02d-%02d", year, month, day)
+	s := fmt.Sprintf("%d-%02d-%02d", year, month, day)
 
 	bce, _ := ts.flags.GetBoolean("bce")
 
 	if bce == true {
-	   s = fmt.Sprintf("%s BCE", s)
+		s = fmt.Sprintf("%s BCE", s)
 	}
 
 	return s
 }
 
 type TimeFlags struct {
-     Flags
-     booleans map[string]bool
+	Flags
+	booleans map[string]bool
 }
 
-func (tf *TimeFlags) GetBoolean (k string) (bool, error) {
+func (tf *TimeFlags) GetBoolean(k string) (bool, error) {
 
-     v, ok := tf.booleans[k]
+	v, ok := tf.booleans[k]
 
-     if !ok{
-     	return false, errors.New("Unknown flag")
-     }
+	if !ok {
+		return false, errors.New("Unknown flag")
+	}
 
-     return v, nil
+	return v, nil
 }
 
-func (tf *TimeFlags) SetBoolean (k string, v bool) (bool, error) {
+func (tf *TimeFlags) SetBoolean(k string, v bool) (bool, error) {
 
-     _, ok := tf.booleans[k]
+	_, ok := tf.booleans[k]
 
-     if !ok{
-     	return false, errors.New("Unknown flag")
-     }
+	if !ok {
+		return false, errors.New("Unknown flag")
+	}
 
-     tf.booleans[k] = v
-     return true, nil
+	tf.booleans[k] = v
+	return true, nil
 }
