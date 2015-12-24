@@ -6,7 +6,7 @@ A Go package for converting `year-month-day` expressions to and from 8-byte inte
 
 This package is under active development. It is incomplete and probably still has bugs. Among other things:
 
-* It is not the CIDOC‐CRM Temporal specification – specifically the numeric representations of dates are _not_ the same
+* This does _not_ implement the CIDOC‐CRM Temporal specification – specifically the numeric representations of dates are _not_ the same
 * It does not handle period "expressions" or any of signifiers yet
 * It does not handle years greater than 9999 (or less than -9999) yet _because Go's date parser appears to be built on top of MADNESS..._
 * It does not implement temporal operators yet
@@ -45,15 +45,30 @@ func main (){
      fmt.Printf("lower (from int): %v (%d)\n", lower_slice, lower_slice.AsInt())
      fmt.Printf("upper (from int): %v (%d)\n", upper_slice, upper_slice.AsInt())
 }
+```
 
-// The output of this would be:
-// wedge: 1914-08-04,1918-11-11
-// lower: 1914-08-04
-// upper: 1918-11-11
-// lower (as int): 125469184
-// upper (as int): 125744576
-// lower (from int): 1914-08-04 (125469184)
-// upper (from int): 1918-11-11 (125744576)
+The output of this program would be:
+
+```
+wedge: 1914-08-04,1918-11-11
+lower: 1914-08-04
+upper: 1918-11-11
+lower (as int): 125469184
+upper (as int): 125744576
+lower (from int): 1914-08-04 (125469184)
+upper (from int): 1918-11-11 (125744576)
+```
+
+If you changed the upper and lower dates to be `00-01-01` and `00-01-01 BCE` respectively the output would be:
+
+```
+wedge: 0000-01-01 BCE,0000-01-01
+lower: 0000-01-01 BCE
+upper: 0000-01-01
+lower (as int): -4224
+upper (as int): 4288
+lower (from int): 0000-01-01 BCE (-4224)
+upper (from int): 0000-01-01 (4288)
 ```
 
 _Not discussed here is the `TimePie` which is a named pair of `TimeWedge` object-thingies._

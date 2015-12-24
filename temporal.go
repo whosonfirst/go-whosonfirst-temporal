@@ -466,7 +466,7 @@ func (ts *TimeSlice) String() string {
 	month := int(ts.time.Month())
 	day := ts.time.Day()
 
-	s := fmt.Sprintf("%d-%02d-%02d", year, month, day)
+	s := fmt.Sprintf("%04d-%02d-%02d", year, month, day)
 
 	bce, _ := ts.flags.GetBoolean("bce")
 
