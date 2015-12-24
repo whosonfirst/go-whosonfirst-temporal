@@ -57,7 +57,7 @@ func main (){
 // upper (from int): 1918-11-11 (125744576)
 ```
 
-_Not discussed here is the `TimePie` which is a named pair `TimeWedge` object-thingies._
+_Not discussed here is the `TimePie` which is a named pair of `TimeWedge` object-thingies._
 
 ## See also
 
